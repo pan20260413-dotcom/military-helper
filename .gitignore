@@ -1,0 +1,4 @@
+# Dependencies & Temporary Files
+node_modules/
+.DS_Store
+*.log
