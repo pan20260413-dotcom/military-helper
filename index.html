@@ -3505,6 +3505,60 @@ function renderHomeTodayStatusCard() {
   </div>`;
 }
 
+
+/* ============================ V2.6 Phase 5.1: 🎯 今日控制中心 (Today Control Center) ============================ */
+function renderHomeTodayControlCenter() {
+  const todaySleep = HealthManager.todayAgg('sleep');
+  const todayWater = HealthManager.todayAgg('water');
+  const todayMood = HealthManager.todayAgg('mood');
+  const todayStress = HealthManager.todayAgg('stress');
+  const waterGoal = (Store.data.settings && Store.data.settings.waterGoal) || 2000;
+  const waterPercent = todayWater !== null ? Math.min(100, Math.round((todayWater / waterGoal) * 100)) : 0;
+
+  const rec = DailyActionManager.getPrimaryRecommendation();
+  const list = DailyActionManager.getTodayCompletionList();
+
+  return `
+  <div class="today-control-center" style="margin: 12px 0; padding: 16px; background: var(--bg-card); border: 1px solid var(--line); border-radius: 16px;">
+    <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:12px;">
+      <div style="font-size:15px; font-weight:bold; color:var(--ink); display:flex; align-items:center; gap:6px;">
+        <span>🎯 今日控制中心</span>
+      </div>
+      <button class="chip" style="font-size:12px; padding:4px 10px;" data-action="nav" data-value="trendCenter">📊 趨勢 ›</button>
+    </div>
+
+    <!-- 第一層：健康/心情快照 -->
+    <div class="todaygrid" style="padding:0; margin-bottom:12px;">
+      <div class="todaytile"><div class="e">😊</div><div class="n">${todayMood !== null ? (todayMood >= 60 ? '良好' : (todayMood >= 40 ? '普通' : '需要沉澱')) : '未紀錄'}</div><div class="l">心情</div></div>
+      <div class="todaytile"><div class="e">😮‍💨</div><div class="n">${todayStress !== null ? (todayStress <= 30 ? '偏高' : (todayStress <= 60 ? '適中' : '平穩')) : '未紀錄'}</div><div class="l">壓力</div></div>
+      <div class="todaytile"><div class="e">😴</div><div class="n">${todaySleep !== null ? todaySleep.toFixed(1) + 'h' : '未紀錄'}</div><div class="l">睡眠</div></div>
+      <div class="todaytile"><div class="e">💧</div><div class="n">${todayWater !== null ? waterPercent + '%' : '未紀錄'}</div><div class="l">喝水</div></div>
+    </div>
+
+    <!-- 第二層：現在最適合做什麼？ (Hero Action) -->
+    <div style="background:var(--bg-body); border-radius:12px; padding:12px 14px; margin-bottom:12px; border:1px solid var(--line);">
+      <div style="font-size:12px; font-weight:bold; color:var(--primary); margin-bottom:4px; display:flex; align-items:center; gap:6px;">
+        <span>🧭 現在最適合做什麼？</span>
+      </div>
+      <div style="font-size:14.5px; font-weight:bold; color:var(--ink); margin-bottom:4px;">${esc(rec.title)}</div>
+      <div style="font-size:12.5px; color:var(--ink-soft); line-height:1.4; margin-bottom:8px;">${esc(rec.desc)}</div>
+      <button class="bigbtn" style="padding:8px 14px; font-size:13.5px;" data-action="${rec.action}" data-value="${rec.value}">${esc(rec.btnText)}</button>
+    </div>
+
+    <!-- 第三層：今日完成進度 -->
+    <div style="border-top:1px dashed var(--line); padding-top:10px;">
+      <div style="font-size:12.5px; font-weight:bold; color:var(--ink); margin-bottom:6px;">📌 今日完成進度</div>
+      <div style="display:grid; grid-template-columns: repeat(4, 1fr); gap: 6px;">
+        ${list.map(item => `
+          <button class="chip" style="font-size:11.5px; padding:5px 2px; text-align:center; justify-content:center; background:${item.done?'var(--bg-body)':'transparent'};" data-action="${item.action}" data-value="${item.value}">
+            ${item.done ? '☑️' : '○'} ${esc(item.label)}
+          </button>
+        `).join('')}
+      </div>
+    </div>
+  </div>`;
+}
+
 UI.screenHome = function(){
   const c = TaskManager.homeCounts();
   const nxt = TaskManager.nextUpList();
@@ -3512,10 +3566,6 @@ UI.screenHome = function(){
   const waitingCount = Store.data.tasks.filter(t=>t.status==='waiting').length;
   const s = Store.data.settings;
   const hs = s.homeSections;
-  const todaySleep = HealthManager.todayAgg('sleep');
-  const todayWater = HealthManager.todayAgg('water');
-  const todayMood = HealthManager.todayAgg('mood');
-  const todayStress = HealthManager.todayAgg('stress');
   return `
   <div class="home-header">
     <div class="home-toprow">
@@ -3527,13 +3577,8 @@ UI.screenHome = function(){
   </div>
   <div class="oneliner">💬 ${esc(TaskManager.oneLiner())}</div>
 
-  ${hs.status ? renderHomeTodayStatusCard() : ''}
-
-  <!-- 🧭 現在最適合做什麼？ -->
-  ${renderHomeRecommendationCard()}
-
-  <!-- 📌 今日完成進度 -->
-  ${renderHomeTodayCompletionGrid()}
+  <!-- 🎯 今日控制中心 (Today Control Center) -->
+  ${renderHomeTodayControlCenter()}
 
   <div class="board">
     <div class="board-tile red" data-action="nav-filter" data-value="urgent"><div class="n">${c.urgent}</div><div class="l">🔴急件</div></div>
@@ -3572,8 +3617,6 @@ UI.screenHome = function(){
     </div>
   </div>`) : ''}
 
-  ${hs.english ? renderHomeTodayEnglishCard() : ''}
-
   <div class="entrygrid">
     <button class="entrybtn primary" data-action="nav" data-value="report">
       <div class="emoji">📣</div><div class="lbl">快速回報</div>
@@ -3593,33 +3636,14 @@ UI.screenHome = function(){
     </button>
   </div>
 
-  ${hs.health ? `
-  <div class="linkrow" data-action="nav" data-value="health">
-    <div><div>🌿 我的健康</div><div class="sub">${esc(HealthManager.lifeStatus().text)}</div></div>
-    <div class="arrow">›</div>
-  </div>` : ''}
+  ${hs.english ? renderHomeTodayEnglishCard() : ''}
+
   <div class="linkrow" data-action="nav" data-value="trendCenter">
     <div><div>📊 查看我的趨勢</div><div class="sub">了解最近的自己過得怎麼樣</div></div>
     <div class="arrow">›</div>
   </div>
   <div class="linkrow" data-action="nav" data-value="militaryRetirement">
     <div><div>🎖️ 我的退伍／退休規劃</div><div class="sub">生涯倒數、退休金試算與準備清單</div></div>
-    <div class="arrow">›</div>
-  </div>
-  <div class="linkrow" data-action="nav" data-value="gratitude">
-    <div><div>🙏 感恩日記</div><div class="sub">今天有什麼值得感謝的事？</div></div>
-    <div class="arrow">›</div>
-  </div>
-  <div class="linkrow" data-action="nav" data-value="selfAware">
-    <div><div>🧠 自我覺察</div><div class="sub">看看今天的自己</div></div>
-    <div class="arrow">›</div>
-  </div>
-  <div class="linkrow" data-action="nav" data-value="emotion">
-    <div><div>❤️ 我的情緒</div><div class="sub">記下今天的感受</div></div>
-    <div class="arrow">›</div>
-  </div>
-  <div class="linkrow" data-action="nav" data-value="learningHub">
-    <div><div>🧠 學習工具箱</div><div class="sub">SWOT、WOOP 等思考工具</div></div>
     <div class="arrow">›</div>
   </div>
   <div class="linkrow" data-action="nav" data-value="interruptions">
