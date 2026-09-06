@@ -2865,9 +2865,21 @@ const TrendManager = {
   },
   getWeeklySummary() {
     const m = this.getMetrics(7);
+    const today = new Date();
+    today.setHours(23, 59, 59, 999);
+    const cutoff = new Date(today);
+    cutoff.setDate(cutoff.getDate() - 7);
+    cutoff.setHours(0, 0, 0, 0);
+
+    const isCurrent = (isoStr) => {
+      if(!isoStr) return false;
+      const d = new Date(isoStr);
+      return d >= cutoff && d <= today;
+    };
+
     const tasks = (Store.data && Array.isArray(Store.data.tasks)) ? Store.data.tasks : [];
-    const completedTasksThisWeek = tasks.filter(t => t.status === 'done' && (TaskManager.isToday(t.updatedAt || t.createdAt) || (new Date(t.updatedAt || t.createdAt) >= new Date(Date.now() - 7 * 86400000)))).length;
-    const cardDrawsThisWeek = (Store.data && Array.isArray(Store.data.cardDraws)) ? Store.data.cardDraws.filter(c => (new Date(c.date || c.createdAt) >= new Date(Date.now() - 7 * 86400000))).length : 0;
+    const completedTasksThisWeek = tasks.filter(t => t.status === 'done' && isCurrent(t.updatedAt || t.createdAt)).length;
+    const cardDrawsThisWeek = (Store.data && Array.isArray(Store.data.cardDraws)) ? Store.data.cardDraws.filter(c => isCurrent(c.date || c.createdAt)).length : 0;
     
     return {
       tasksDone: completedTasksThisWeek,
