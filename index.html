@@ -474,9 +474,18 @@ const RELAX_FEEL_OPTIONS = [
 
 const MINDFULNESS_TYPES = {
   oneMin: { label:'1 分鐘正念', emoji:'🌿' },
+  twoMin: { label:'2 分鐘正念', emoji:'🧘' },
   bodyScan: { label:'身體掃描', emoji:'🧘' },
   fiveSense: { label:'5-4-3-2-1 感官練習', emoji:'✋' }
 };
+const MINDFULNESS_TWOMIN_LINES = [
+  '輕輕閉上眼睛，或專注於眼前一點。',
+  '感覺吸氣時胸口與腹部的自然起伏。',
+  '覺察腦海中浮現的想法，不用排斥或評價它。',
+  '像看著雲朵一樣，觀察想法輕輕飄過。',
+  '重新把注意力帶回呼吸與心跳。',
+  '告訴自己：這一刻我是安全的，我做的很好。'
+];
 const MINDFULNESS_ONEMIN_LINES = [
   '找一個舒服的位置。','注意自己的呼吸。','不需要改變它，只要觀察。','注意當下的身體感受。','聽聽周遭的聲音。','不批判自己，只是注意現在。'
 ];
@@ -3052,6 +3061,7 @@ let lastReport = null; // {standard,short,formal,verbal}
 let uiTasks = { filter:'all', search:'' };
 let relax = { mood:null, elapsed:0, timerId:null };
 let quickMenuOpen = false;
+let quickCardUI = { drawnAnswer: null, feedback: null };
 let calState = { year:new Date().getFullYear(), month:new Date().getMonth()+1, selected: null };
 let formEvent = defaultFormEvent();
 function defaultFormEvent(){
@@ -5090,45 +5100,89 @@ UI.screenRelaxHub = function(){
   return `
   <div class="topbar">
     <button class="backbtn" data-action="nav" data-value="home">‹</button>
-    <div class="ttl">🧘 放鬆中心</div>
+    <div class="ttl">🧘 情緒重置中心</div>
     <div class="datestamp"></div>
   </div>
   <div class="hero-invite">
-    <div class="t1">🧘 放鬆中心</div>
-    <div class="t2">給自己幾分鐘，暫時離開忙碌的事情。</div>
+    <div class="t1">🧘 情緒重置中心</div>
+    <div class="t2">當下覺察，停一下、深呼吸，給心靈一個重置的空間。</div>
   </div>
 
-  <div class="formwrap" style="padding-bottom:6px;">
-    <button class="bigbtn" data-action="nav" data-value="cards">🎴 抽一張卡</button>
-    <div class="hint" style="text-align:center;margin-top:6px;">沒有標準答案，讓一句話陪你想一想。</div>
+  <!-- ① 現在的你還好嗎？ -->
+  <div class="section-label">① 現在的你還好嗎？</div>
+  <div class="choicegrid" style="grid-template-columns: repeat(4, 1fr); gap: 8px;">
+    <button class="choicecard" style="padding:10px 4px;" data-action="quick-log-emotion" data-value="good"><span class="e">😊</span><span class="l">還不錯</span></button>
+    <button class="choicecard" style="padding:10px 4px;" data-action="quick-log-emotion" data-value="normal"><span class="e">😐</span><span class="l">普普通通</span></button>
+    <button class="choicecard" style="padding:10px 4px;" data-action="quick-log-emotion" data-value="annoyed"><span class="e">😣</span><span class="l">有點煩</span></button>
+    <button class="choicecard" style="padding:10px 4px;" data-action="quick-log-emotion" data-value="stressed"><span class="e">😮‍💨</span><span class="l">壓力很大</span></button>
+    <button class="choicecard" style="padding:10px 4px;" data-action="quick-log-emotion" data-value="tired"><span class="e">😴</span><span class="l">很疲累</span></button>
+    <button class="choicecard" style="padding:10px 4px;" data-action="quick-log-emotion" data-value="angry"><span class="e">😡</span><span class="l">有點生氣</span></button>
+    <button class="choicecard" style="padding:10px 4px;" data-action="quick-log-emotion" data-value="down"><span class="e">😔</span><span class="l">心情低落</span></button>
+    <button class="choicecard" style="padding:10px 4px;" data-action="quick-log-emotion" data-value="confused"><span class="e">🤯</span><span class="l">腦袋很亂</span></button>
   </div>
 
-  <div class="section-label">🌬️ 呼吸與正念</div>
+  <!-- ② 快速情緒重置 -->
+  <div class="section-label">② 快速情緒重置</div>
   <div class="choicegrid">
-    <button class="choicecard" data-action="nav" data-value="relax"><span class="e">😮‍💨</span><span class="l">60 秒呼吸</span><span class="d">先穩住情緒</span></button>
-    <button class="choicecard" data-action="mindful-start" data-value="oneMin"><span class="e">🌿</span><span class="l">1 分鐘正念</span><span class="d">回到當下</span></button>
-    <button class="choicecard" data-action="relax-start" data-value="3"><span class="e">🌬️</span><span class="l">3 分鐘呼吸</span></button>
-    <button class="choicecard" data-action="relax-start" data-value="5"><span class="e">🌬️</span><span class="l">5 分鐘呼吸</span></button>
-    <button class="choicecard" data-action="relax-start" data-value="10"><span class="e">🌬️</span><span class="l">10 分鐘呼吸</span></button>
-    <button class="choicecard" data-action="mindful-start" data-value="bodyScan"><span class="e">🧘</span><span class="l">身體掃描</span></button>
-    <button class="choicecard" data-action="mindful-start" data-value="fiveSense"><span class="e">✋</span><span class="l">5-4-3-2-1</span><span class="d">思緒很亂時</span></button>
+    <button class="choicecard" data-action="nav" data-value="relax"><span class="e">🌬️</span><span class="l">60 秒呼吸</span><span class="d">穩住情緒</span></button>
+    <button class="choicecard" data-action="mindful-start" data-value="twoMin"><span class="e">🧘</span><span class="l">2 分鐘正念</span><span class="d">回到當下</span></button>
+    <button class="choicecard" data-action="nav" data-value="selfAwareForm"><span class="e">💭</span><span class="l">情緒整理</span><span class="d">釐清思緒</span></button>
+    <button class="choicecard" data-action="nav" data-value="gratitudeForm"><span class="e">🙏</span><span class="l">感恩一下</span><span class="d">發現美好</span></button>
   </div>
 
-  <div class="section-label">🌿 自我照顧</div>
+  <!-- ③ 情緒整理 -->
+  <div class="section-label">③ 情緒整理引導</div>
+  <div class="think-block" style="margin:0 16px 14px 16px; background:var(--bg-card); border-radius:12px; padding:12px 14px;">
+    <div style="font-weight:bold; margin-bottom:6px; color:var(--primary);">💡 靜心整理四步驟：</div>
+    <ol style="margin:0; padding-left:18px; font-size:13px; line-height:1.6;">
+      <li>我現在感受到什麼？</li>
+      <li>發生了什麼？</li>
+      <li>我現在最需要的是什麼？</li>
+      <li>有什麼事情是我現在可以控制的？</li>
+    </ol>
+    <button class="bigbtn outline" style="margin-top:10px; font-size:13px; padding:8px;" data-action="nav" data-value="selfAwareForm">📝 開始情緒整理引導表單</button>
+  </div>
+
+  <!-- ④ 我現在需要什麼？ -->
+  <div class="section-label">④ 我現在需要什麼？</div>
   <div class="choicegrid">
-    <button class="choicecard" data-action="nav" data-value="gratitudeModePicker"><span class="e">🙏</span><span class="l">感恩日記</span></button>
-    <button class="choicecard" data-action="nav" data-value="selfAwareForm"><span class="e">🪞</span><span class="l">自我覺察</span></button>
-    <button class="choicecard" data-action="nav" data-value="emotionForm"><span class="e">❤️</span><span class="l">情緒紀錄</span></button>
+    <button class="choicecard" data-action="nav" data-value="relax"><span class="e">😮‍💨</span><span class="l">放鬆一下</span></button>
+    <button class="choicecard" data-action="nav" data-value="selfAwareForm"><span class="e">🧠</span><span class="l">整理思緒</span></button>
+    <button class="choicecard" data-action="nav" data-value="emotionForm"><span class="e">❤️</span><span class="l">安慰自己</span></button>
+    <button class="choicecard" data-action="nav" data-value="cards"><span class="e">🔥</span><span class="l">找回動力</span></button>
+    <button class="choicecard" data-action="mindful-start" data-value="bodyScan"><span class="e">😴</span><span class="l">休息一下</span></button>
+    <button class="choicecard" data-action="nav" data-value="gratitudeForm"><span class="e">🙏</span><span class="l">感謝當下</span></button>
+    <button class="choicecard" data-action="nav" data-value="cards"><span class="e">🎲</span><span class="l">想看看解答</span></button>
   </div>
 
-  <div class="section-label">📖 為什麼需要放鬆？</div>
+  <!-- ⑤ Book of Answers 解答之書入口 -->
+  <div class="section-label">⑤ 解答之書：📖 給現在的自己一句話</div>
+  <div class="formwrap" style="padding-top:0;">
+    ${!quickCardUI.drawnAnswer ? `
+      <button class="bigbtn" data-action="quick-card-draw">📖 抽一張解答卡</button>
+      <div class="hint" style="text-align:center;margin-top:6px;">沒有標準答案，讓一句話陪你想一想。</div>
+    ` : `
+      <div class="card-stage" style="padding:16px; margin:0; border:1px solid var(--line); border-radius:14px; background:var(--bg-card); text-align:center;">
+        <div style="font-size:24px; margin-bottom:8px;">🎴</div>
+        <div class="wizardq" style="font-size:16px; font-weight:bold; margin-bottom:12px; color:var(--ink);">${esc(quickCardUI.drawnAnswer.answer || quickCardUI.drawnAnswer.text)}</div>
+        ${quickCardUI.feedback ? `<div class="hint" style="color:var(--primary); margin-bottom:8px;">✓ 已記錄感受</div>` : ''}
+        <div class="choicegrid" style="grid-template-columns: repeat(4, 1fr); gap:4px; padding:0;">
+          <button class="choicecard" style="padding:8px 2px;" data-action="quick-card-feedback" data-value="resonant"><span class="e">❤️</span><span class="l">有共鳴</span></button>
+          <button class="choicecard" style="padding:8px 2px;" data-action="quick-card-feedback" data-value="think"><span class="e">🤔</span><span class="l">值得想想</span></button>
+          <button class="choicecard" style="padding:8px 2px;" data-action="quick-card-feedback" data-value="normal"><span class="e">😐</span><span class="l">普普通通</span></button>
+          <button class="choicecard" style="padding:8px 2px;" data-action="quick-card-draw"><span class="e">🔄</span><span class="l">再抽一張</span></button>
+        </div>
+      </div>
+    `}
+  </div>
+
+  <!-- ⑥ Joe Dispenza 觀念區 -->
+  <div class="section-label">⑥ 注意力與覺察練習 (Joe Dispenza 觀念)</div>
   <div class="think-block" style="margin:0 16px 14px 16px;">
-    壓力大的時候，身體會進入「備戰」狀態——心跳變快、肌肉緊繃、思緒變快。放鬆練習不是要你「馬上變好」，而是給身體一個訊號：現在可以稍微鬆開一點了。<br><br>
-    <b>呼吸練習</b> 用固定節奏的呼吸，慢慢把心跳和情緒帶回穩定。<br>
-    <b>正念</b> 把注意力帶回當下，不批判、只是觀察。<br>
-    <b>身體掃描</b> 從頭到腳，一步一步注意身體的感覺並放鬆。<br>
-    <b>5-4-3-2-1</b> 用五感把自己帶回眼前的環境，適合思緒很亂的時候。<br>
-    <b>情緒覺察</b> 先認出現在的感受，是照顧自己的第一步。
+    <b>🧠 重構注意力與神經脈絡：</b><br>
+    當我們把注意力從外在環境與焦慮事件抽離，重新帶回內在的覺察時，我們就能停止重複過去的反應模式。<br>
+    透過深呼吸與正念練習，讓自律神經獲得平靜，這是在日常中給自己進行「心理重置」的最佳時刻。<br>
+    <span style="font-size:11px; color:var(--ink-faint); display:block; margin-top:6px;">※ 本單元旨在提供日常自我覺察、注意力調節與放鬆練習，非醫療診斷或治療手段。</span>
   </div>
 
   ${recent.length ? `
@@ -5239,7 +5293,7 @@ UI.screenMindfulnessRun = function(){
       <button class="bigbtn" style="margin-top:16px;" data-action="mindful-next">${mindfulUI.step===FIVE_SENSE_STEPS.length-1?'完成':'下一步 →'}</button>
     </div>`;
   }
-  const lines = type==='oneMin' ? MINDFULNESS_ONEMIN_LINES : BODY_SCAN_PARTS.map(p=>p.text);
+  const lines = type==='oneMin' ? MINDFULNESS_ONEMIN_LINES : (type==='twoMin' ? MINDFULNESS_TWOMIN_LINES : BODY_SCAN_PARTS.map(p=>p.text));
   const isLast = mindfulUI.step >= lines.length-1;
   return `
   <div class="card-stage">
