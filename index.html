@@ -541,7 +541,7 @@ const LEARNING_TOOLS = [
   { key:'5w1h', emoji:'📝', label:'5W1H', desc:'用六個問題把一件事情想清楚。', available:true, go:'fiveWOneH' },
   { key:'eisenhower', emoji:'🗂️', label:'艾森豪威爾矩陣', desc:'依重要程度與緊急程度排出任務優先順序。', available:true, go:'eisenhower' },
   { key:'pdca', emoji:'🔄', label:'PDCA', desc:'計畫、執行、檢查、行動的循環改善方法。', available:true, go:'pdca' },
-  { key:'smart', emoji:'✅', label:'SMART 目標', desc:'把目標寫得更具體、可衡量。', available:false }
+  { key:'smart', emoji:'✅', label:'SMART 目標', desc:'把目標寫得更具體、可衡量。', available:true, go:'smartHub' }
 ];
 const SWOT_QUADRANTS = [
   { key:'s', label:'S｜優勢 Strengths', emoji:'💪', desc:'內部正面因素。', examples:'自己擅長的事情・已經具備的能力・可以利用的資源', ph:'例如：我做事很細心，交辦的事情很少出錯。' },
@@ -2803,6 +2803,10 @@ const GoalsManager = {
     if (!Array.isArray(Store.data.goals)) Store.data.goals = [];
     return Store.data.goals;
   },
+  get(id) {
+    const goals = this.getAll();
+    return goals.find(g => g.id === id) || null;
+  },
   add(data) {
     const goals = this.getAll();
     const newItem = {
@@ -2812,11 +2816,34 @@ const GoalsManager = {
       targetDate: data.targetDate || '',
       progress: Number(data.progress) || 0,
       nextStep: data.nextStep || '',
-      createdAt: new Date().toISOString()
+      createdAt: new Date().toISOString(),
+      isSmart: !!(data.isSmart || data.smart),
+      smart: data.smart ? {
+        specific: data.smart.specific || '',
+        measurable: data.smart.measurable || '',
+        achievable: data.smart.achievable || '',
+        relevant: data.smart.relevant || '',
+        timeBound: data.smart.timeBound || ''
+      } : null
     };
     goals.push(newItem);
     Store.save();
     return newItem;
+  },
+  update(id, data) {
+    const goals = this.getAll();
+    const idx = goals.findIndex(g => g.id === id);
+    if (idx !== -1) {
+      const existing = goals[idx];
+      const updatedSmart = (data.smart || existing.smart) ? Object.assign({}, existing.smart || {}, data.smart || {}) : null;
+      goals[idx] = Object.assign({}, existing, data, {
+        progress: Number(data.progress !== undefined ? data.progress : existing.progress) || 0,
+        smart: updatedSmart
+      });
+      Store.save();
+      return goals[idx];
+    }
+    return null;
   },
   updateProgress(id, progress) {
     const goals = this.getAll();
@@ -3107,7 +3134,7 @@ let lastReport = null; // {standard,short,formal,verbal}
 let uiTasks = { filter:'all', search:'' };
 let relax = { mood:null, elapsed:0, timerId:null };
 let quickMenuOpen = false;
-let quickCardUI = { drawnAnswer: null, feedback: null };
+let quickCardUI = { drawnAnswer: null, feedback: null, currentDrawId: null };
 let calState = { year:new Date().getFullYear(), month:new Date().getMonth()+1, selected: null };
 let formEvent = defaultFormEvent();
 function defaultFormEvent(){
@@ -3173,6 +3200,66 @@ function defaultFormInterruption(){
 }
 let formWoop = defaultFormWoop();
 function defaultFormWoop(){ return { id:null, date:TaskManager.todayDateStr(), wish:'', outcome:'', obstacle:'', ifPart:'', thenPart:'', result:'' }; }
+
+let smartUI = { step: 0, expandedIds: [] };
+let formSmart = defaultFormSmart();
+function defaultFormSmart() {
+  return {
+    id: null,
+    title: '',
+    category: '個人成長',
+    targetDate: TaskManager.todayDateStr(),
+    progress: 0,
+    nextStep: '',
+    isSmart: true,
+    smart: { specific: '', measurable: '', achievable: '', relevant: '', timeBound: '' }
+  };
+}
+const SMART_EXAMPLES = [
+  {
+    title: '退伍前完成職業規劃與履歷撰寫',
+    category: '軍旅退伍',
+    targetDate: '2026-12-31',
+    smart: {
+      specific: '完成月退金試算與 2 份民營企業專案管理履歷初稿。',
+      measurable: '履歷完成度 100%，進行 3 次模擬面試。',
+      achievable: '每週放假排定 2 小時整理軍中專案與領導紀錄。',
+      relevant: '順利無縫轉銜民營職場，減少退伍後求職焦慮。',
+      timeBound: '退伍前 6 個月（2026/12/31）前全部完成。'
+    }
+  },
+  {
+    title: '三個月內取得全民英檢中高級合格證書',
+    category: '學習成長',
+    targetDate: '2026-11-30',
+    smart: {
+      specific: '考取全民英檢中高級合格證書，聽力與閱讀分數達標。',
+      measurable: '每週短語單字測驗 > 85 分，模擬考通過率 > 80%。',
+      achievable: '每日利用首頁今日英文刷 20 分鐘單字，每週日練習模擬題。',
+      relevant: '提升個人英文溝通能力，增加外商求職機會。',
+      timeBound: '2026/11/30 前完成應試並取得證書。'
+    }
+  },
+  {
+    title: '每週完成 3 次 30 分鐘有氧運動與規律作息',
+    category: '健康生活',
+    targetDate: '2026-10-31',
+    smart: {
+      specific: '每週安排 3 天進行 30 分鐘跑步訓練，並於 23:30 前就寢。',
+      measurable: '每週完成 3 次紀錄，睡眠達 7 小時以上。',
+      achievable: '下班後 19:00 前完成運動，就寢前半小時將手機遠離床鋪。',
+      relevant: '維持良好體能與精神狀態，降低工作壓力。',
+      timeBound: '持續 8 週，至 2026/10/31 止。'
+    }
+  }
+];
+const SMART_STEPS = [
+  { key: 'specific', title: 'S 🎯 具體 (Specific)', ph: '例如：考取全民英檢中高級合格證書，聽力與閱讀分數達標。', desc: '明確描述你想完成什麼具體目標，避免模糊不清。' },
+  { key: 'measurable', title: 'M 📊 可衡量 (Measurable)', ph: '例如：每週單字測驗達 85 分，模擬考分數 > 80 分。', desc: '定義如何判斷目標已經完成？用什麼指標或數字來驗證？' },
+  { key: 'achievable', title: 'A 🌿 可行性 (Achievable)', ph: '例如：每日利用首頁今日英文刷 20 分鐘單字，每週日練習模擬題。', desc: '評估這個目標是否符合現實？準備採取哪些具體行動步驟？' },
+  { key: 'relevant', title: 'R 💡 相關性 (Relevant)', ph: '例如：提升個人英文溝通能力，增加外商求職機會。', desc: '說明為什麼這個目標對你重要？它與你的長期規劃有何關聯？' },
+  { key: 'timeBound', title: 'T ⏱️ 時限 (Time-bound)', ph: '例如：2026/11/30 前完成應試並取得證書。', desc: '設定明確的完成目標日期與階段性時間期限。' }
+];
 
 let cardUI = { stage:'mode', category:null, question:'', drawnAnswer:null };
 let formCardReflect = { understanding:'', feeling:5, laterResult:'' };
@@ -5567,6 +5654,185 @@ UI.screenMindfulnessRun = function(){
 };
 
 /* ============================ V1.8 UI: WOOP ============================ */
+
+/* ============================ V2.6 Phase 5.2: SMART 目標系統 UI ============================ */
+UI.screenSmartHub = function(){
+  const allGoals = GoalsManager.getAll();
+  const smartGoals = allGoals.filter(g => g.isSmart || (g.smart && (g.smart.specific || g.smart.measurable)));
+  const ongoing = smartGoals.filter(g => (g.progress || 0) < 100);
+  const completed = smartGoals.filter(g => (g.progress || 0) >= 100);
+
+  return `
+  <div class="topbar">
+    <button class="backbtn" data-action="nav" data-value="learningHub">‹</button>
+    <div class="ttl">✅ SMART 目標</div>
+    <button class="iconbtn" data-action="smart-new">＋</button>
+  </div>
+
+  <div class="hero-invite">
+    <div class="t1">✅ 把目標寫得更具體、可衡量</div>
+    <div class="t2">SMART 包含 🎯具體、📊可衡量、🌿可行、💡相關與 ⏱️時限，讓目標不再只是空想。</div>
+    <button class="bigbtn" style="margin-top:12px;" data-action="smart-new">＋ 建立第一個 SMART 目標</button>
+  </div>
+
+  <div class="section-label">💡 載入實用範例參考</div>
+  <div style="display:flex; gap:6px; overflow-x:auto; padding:0 0 10px 0; margin-bottom:10px;">
+    ${SMART_EXAMPLES.map((ex, i) => `
+      <button class="chip" style="white-space:nowrap; padding:6px 12px; font-size:12px;" data-action="smart-example" data-value="${i}">
+        💡 ${esc(ex.category)}：${esc(ex.title.slice(0, 14))}...
+      </button>
+    `).join('')}
+  </div>
+
+  <div class="section-label">📌 進行中的 SMART 目標 (${ongoing.length})</div>
+  ${ongoing.length === 0 ? `
+    <div class="empty" style="padding:24px 16px; background:var(--bg-card); border:1px solid var(--line); border-radius:16px; text-align:center; margin-bottom:16px;">
+      <span class="e" style="font-size:32px;">🌱</span>
+      <div style="font-weight:bold; font-size:15px; margin:8px 0 4px 0; color:var(--ink);">尚無進行中的 SMART 目標</div>
+      <div style="font-size:13px; color:var(--ink-soft); line-height:1.5;">點擊右上角「＋」或下方按鈕，開始設定你的第一個具體目標。</div>
+    </div>
+  ` : ongoing.map(g => renderSmartGoalCard(g)).join('')}
+
+  ${completed.length > 0 ? `
+    <div class="section-label" style="margin-top:16px;">🎉 已完成的 SMART 目標 (${completed.length})</div>
+    ${completed.map(g => renderSmartGoalCard(g)).join('')}
+  ` : ''}
+
+  <div class="gap"></div>
+  `;
+};
+
+function renderSmartGoalCard(g) {
+  const isExpanded = smartUI.expandedIds.includes(g.id);
+  const sm = g.smart || {};
+  const prog = Number(g.progress) || 0;
+
+  return `
+  <div class="smart-card" style="margin-bottom:14px; padding:14px 16px; background:var(--bg-card); border:1px solid var(--line); border-radius:16px;">
+    <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:6px;">
+      <div style="display:flex; align-items:center; gap:6px;">
+        <span class="chip" style="font-size:11px; padding:2px 8px; background:var(--primary); color:#fff;">🎯 SMART</span>
+        <span class="chip" style="font-size:11px; padding:2px 8px;">${esc(g.category || '一般')}</span>
+      </div>
+      <div style="font-size:13px; font-weight:bold; color:var(--primary);">${prog}%</div>
+    </div>
+
+    <div style="font-size:15px; font-weight:bold; color:var(--ink); margin-bottom:6px;">${esc(g.title)}</div>
+    
+    ${g.targetDate ? `
+      <div style="font-size:12px; color:var(--ink-soft); margin-bottom:8px;">⏱️ 目標日期：${esc(g.targetDate)}</div>
+    ` : ''}
+
+    <div style="background:var(--bg-body); height:8px; border-radius:4px; overflow:hidden; margin-bottom:10px;">
+      <div style="background:var(--primary); height:100%; width:${prog}%;"></div>
+    </div>
+
+    <!-- S/M/A/R/T Accordion Drawer -->
+    <button class="linkrow" style="padding:6px 0; margin-bottom:8px; border:none; background:transparent;" data-action="smart-toggle-accordion" data-id="${g.id}">
+      <span style="font-size:12.5px; font-weight:bold; color:var(--primary);">${isExpanded ? '▲ 收起 SMART 5 要素細節' : '▼ 查看 SMART 5 要素細節'}</span>
+    </button>
+
+    ${isExpanded ? `
+      <div style="background:var(--bg-body); border-radius:12px; padding:10px 12px; margin-bottom:10px; font-size:12.5px; line-height:1.5; color:var(--ink);">
+        ${sm.specific ? `<div style="margin-bottom:4px;"><strong>S 🎯 具體：</strong> ${esc(sm.specific)}</div>` : ''}
+        ${sm.measurable ? `<div style="margin-bottom:4px;"><strong>M 📊 可衡量：</strong> ${esc(sm.measurable)}</div>` : ''}
+        ${sm.achievable ? `<div style="margin-bottom:4px;"><strong>A 🌿 可行性：</strong> ${esc(sm.achievable)}</div>` : ''}
+        ${sm.relevant ? `<div style="margin-bottom:4px;"><strong>R 💡 相關性：</strong> ${esc(sm.relevant)}</div>` : ''}
+        ${sm.timeBound ? `<div style="margin-bottom:4px;"><strong>T ⏱️ 時限：</strong> ${esc(sm.timeBound)}</div>` : ''}
+      </div>
+    ` : ''}
+
+    <!-- Quick Actions -->
+    <div style="display:flex; flex-wrap:wrap; gap:6px; border-top:1px dashed var(--line); padding-top:10px; margin-top:6px;">
+      <button class="chip" style="font-size:12px;" data-action="smart-progress" data-id="${g.id}" data-value="${Math.min(100, prog + 25)}">📊 進度 +25%</button>
+      <button class="chip" style="font-size:12px;" data-action="smart-to-woop" data-id="${g.id}">🎯 用 WOOP 擬定計畫</button>
+      <button class="chip" style="font-size:12px;" data-action="smart-edit" data-id="${g.id}">✏️ 編輯</button>
+      <button class="chip" style="font-size:12px; color:#F3B0A8;" data-action="smart-delete" data-id="${g.id}">🗑️ 刪除</button>
+    </div>
+  </div>`;
+}
+
+UI.screenSmartWizard = function(){
+  const stepIdx = smartUI.step;
+  const isSummary = stepIdx >= SMART_STEPS.length;
+  const currentStep = SMART_STEPS[Math.min(stepIdx, SMART_STEPS.length - 1)];
+  const sm = formSmart.smart || {};
+
+  return `
+  <div class="topbar">
+    <button class="backbtn" data-action="nav" data-value="smartHub">‹ 取消</button>
+    <div class="ttl">✅ ${formSmart.id ? '編輯' : '設定'} SMART 目標</div>
+    <div class="datestamp">Step ${Math.min(stepIdx + 1, 6)}/6</div>
+  </div>
+
+  <div class="formwrap" style="padding:16px;">
+    <!-- Step Dots -->
+    <div class="wizardstep-dots" style="display:flex; justify-content:center; gap:6px; margin-bottom:16px;">
+      ${[0,1,2,3,4,5].map(i => `<span style="width:10px; height:10px; border-radius:50%; background:${i===stepIdx?'var(--primary)':(i<stepIdx?'var(--ink-soft)':'var(--line)')};"></span>`).join('')}
+    </div>
+
+    ${!isSummary ? `
+      <!-- Step 1~5 Form -->
+      <div style="font-size:16px; font-weight:bold; color:var(--ink); margin-bottom:6px;">${currentStep.title}</div>
+      <div style="font-size:13px; color:var(--ink-soft); margin-bottom:12px; line-height:1.4;">${currentStep.desc}</div>
+
+      ${stepIdx === 0 ? `
+        <!-- Title & Category inputs on Step 1 -->
+        <div class="field" style="margin-bottom:12px;">
+          <label style="font-size:13px; font-weight:bold;">目標名稱 (Title)</label>
+          <input type="text" style="width:100%; padding:10px; border-radius:8px; border:1px solid var(--line); font-size:14px;" placeholder="例如：考取全民英檢中高級合格證書" value="${esc(formSmart.title || '')}" oninput="formSmart.title=this.value">
+        </div>
+        <div class="field" style="margin-bottom:12px;">
+          <label style="font-size:13px; font-weight:bold;">類別 (Category)</label>
+          <select style="width:100%; padding:10px; border-radius:8px; border:1px solid var(--line); font-size:14px;" onchange="formSmart.category=this.value">
+            ${['個人成長','軍旅退伍','求職轉銜','學習成長','健康生活','財務規劃'].map(cat => `<option value="${cat}" ${formSmart.category===cat?'selected':''}>${cat}</option>`).join('')}
+          </select>
+        </div>
+      ` : ''}
+
+      <div class="field" style="margin-bottom:16px;">
+        <label style="font-size:13px; font-weight:bold;">${currentStep.title} 細節</label>
+        <textarea rows="4" style="width:100%; padding:10px; border-radius:8px; border:1px solid var(--line); font-size:14px;" placeholder="${esc(currentStep.ph)}" oninput="if(!formSmart.smart) formSmart.smart={}; formSmart.smart['${currentStep.key}']=this.value">${esc(sm[currentStep.key] || '')}</textarea>
+      </div>
+
+      ${stepIdx === 4 ? `
+        <!-- Target Date on Time-bound Step -->
+        <div class="field" style="margin-bottom:16px;">
+          <label style="font-size:13px; font-weight:bold;">⏱️ 目標完成日期 (Target Date)</label>
+          <input type="date" style="width:100%; padding:10px; border-radius:8px; border:1px solid var(--line); font-size:14px;" value="${esc(formSmart.targetDate || TaskManager.todayDateStr())}" onchange="formSmart.targetDate=this.value">
+        </div>
+      ` : ''}
+
+      <div style="display:flex; gap:10px; margin-top:20px;">
+        ${stepIdx > 0 ? `<button class="bigbtn outline" style="flex:1;" data-action="smart-prev">← 上一步</button>` : ''}
+        <button class="bigbtn" style="flex:1;" data-action="smart-next">下一步 →</button>
+      </div>
+    ` : `
+      <!-- Step 6 Summary -->
+      <div style="font-size:17px; font-weight:bold; color:var(--ink); margin-bottom:10px; text-align:center;">🎯 確認你的 SMART 目標</div>
+      
+      <div style="background:var(--bg-card); border:1px solid var(--line); border-radius:14px; padding:14px; margin-bottom:16px; font-size:13.5px; line-height:1.6;">
+        <div style="font-size:15px; font-weight:bold; color:var(--primary); margin-bottom:8px;">${esc(formSmart.title || '（無標題）')}</div>
+        <div><strong>類別：</strong> ${esc(formSmart.category || '一般')}</div>
+        <div><strong>目標日期：</strong> ${esc(formSmart.targetDate || '無')}</div>
+        <hr style="border:none; border-top:1px dashed var(--line); margin:8px 0;">
+        <div><strong>S 🎯 具體：</strong> ${esc(sm.specific || '無')}</div>
+        <div><strong>M 📊 可衡量：</strong> ${esc(sm.measurable || '無')}</div>
+        <div><strong>A 🌿 可行性：</strong> ${esc(sm.achievable || '無')}</div>
+        <div><strong>R 💡 相關性：</strong> ${esc(sm.relevant || '無')}</div>
+        <div><strong>T ⏱️ 時限：</strong> ${esc(sm.timeBound || '無')}</div>
+      </div>
+
+      <div style="display:flex; gap:10px;">
+        <button class="bigbtn outline" style="flex:1;" data-action="smart-prev">← 修改上一步</button>
+        <button class="bigbtn" style="flex:1;" data-action="smart-save">✅ 建立 SMART 目標</button>
+      </div>
+    `}
+  </div>
+  `;
+};
+
+
 UI.screenWoop = function(){
   const list = WoopManager.list();
   return `
@@ -6467,6 +6733,8 @@ function render(){
     case 'relaxCenterDone': inner = UI.screenRelaxCenterDone(); break;
     case 'mindfulness': inner = UI.screenMindfulness(); break;
     case 'mindfulnessRun': inner = UI.screenMindfulnessRun(); break;
+    case 'smartHub': inner = UI.screenSmartHub(); break;
+    case 'smartWizard': inner = UI.screenSmartWizard(); break;
     case 'woop': inner = UI.screenWoop(); break;
     case 'woopWizard': inner = UI.screenWoopWizard(); break;
     case 'woopDone': inner = UI.screenWoopDone(); break;
@@ -6523,7 +6791,7 @@ function bottomNav(){
     tasks:'tasks', taskDetail:'tasks',
     calendar:'calendar', eventForm:'calendar',
     health:'health', healthForm:'health',
-    learningHub:'learningHub', swot:'learningHub', swotForm:'learningHub', swotDetail:'learningHub', fiveWOneH:'learningHub', fiveWOneHForm:'learningHub', fiveWOneHDetail:'learningHub', pdca:'learningHub', pdcaForm:'learningHub', pdcaDetail:'learningHub', eisenhower:'learningHub', englishHub:'learningHub', englishList:'learningHub', englishStats:'learningHub', englishAddForm:'learningHub', cards:'learningHub', cardDraw:'learningHub', cardHistory:'learningHub', cardEditReflection:'learningHub', cardManage:'learningHub', cardAddForm:'learningHub', woop:'learningHub', woopWizard:'learningHub', woopDone:'learningHub', woopDetail:'learningHub',
+    learningHub:'learningHub', smartHub:'learningHub', smartWizard:'learningHub', swot:'learningHub', swotForm:'learningHub', swotDetail:'learningHub', fiveWOneH:'learningHub', fiveWOneHForm:'learningHub', fiveWOneHDetail:'learningHub', pdca:'learningHub', pdcaForm:'learningHub', pdcaDetail:'learningHub', eisenhower:'learningHub', englishHub:'learningHub', englishList:'learningHub', englishStats:'learningHub', englishAddForm:'learningHub', cards:'learningHub', cardDraw:'learningHub', cardHistory:'learningHub', cardEditReflection:'learningHub', cardManage:'learningHub', cardAddForm:'learningHub', woop:'learningHub', woopWizard:'learningHub', woopDone:'learningHub', woopDetail:'learningHub',
     militaryRetirement:'militaryRetirement',
     relax:'relaxHub', relaxHub:'relaxHub', relaxCenter:'relaxHub', relaxCenterTimer:'relaxHub', relaxCenterDone:'relaxHub', relaxTimer:'relaxHub', relaxDone:'relaxHub', gratitude:'relaxHub', gratitudeForm:'relaxHub', gratitudeModePicker:'relaxHub', gratitudeGuide:'relaxHub', gratitudeWhy:'relaxHub', gratitudeExamples:'relaxHub', gratitudeResearch:'relaxHub', selfAware:'relaxHub', selfAwareForm:'relaxHub', emotion:'relaxHub', emotionForm:'relaxHub', mindfulness:'relaxHub', mindfulnessRun:'relaxHub'
   };
@@ -7396,6 +7664,88 @@ document.addEventListener('click', function(e){
     }
     case 'mindful-finish': finishFiveSense(); break;
 
+    /* ---- V2.6 Phase 5.2: SMART 目標 ---- */
+    case 'smart-new':
+      formSmart = defaultFormSmart();
+      smartUI.step = 0;
+      go('smartWizard');
+      break;
+    case 'smart-example': {
+      const ex = SMART_EXAMPLES[Number(value)];
+      if (ex) {
+        formSmart = Object.assign(defaultFormSmart(), {
+          title: ex.title,
+          category: ex.category,
+          targetDate: ex.targetDate,
+          smart: Object.assign({}, ex.smart)
+        });
+        smartUI.step = 0;
+        go('smartWizard');
+      }
+      break;
+    }
+    case 'smart-prev':
+      smartUI.step = Math.max(0, smartUI.step - 1);
+      render();
+      break;
+    case 'smart-next':
+      if (!formSmart.title.trim() && smartUI.step === 0) {
+        toast('請輸入目標名稱');
+        break;
+      }
+      smartUI.step++;
+      render();
+      break;
+    case 'smart-save':
+      if (!formSmart.title.trim()) {
+        toast('請輸入目標名稱');
+        break;
+      }
+      if (formSmart.id) {
+        GoalsManager.update(formSmart.id, formSmart);
+      } else {
+        GoalsManager.add(formSmart);
+      }
+      toast('🎯 已建立 SMART 目標！');
+      go('smartHub');
+      break;
+    case 'smart-edit': {
+      const g = GoalsManager.get(id);
+      if (g) {
+        formSmart = JSON.parse(JSON.stringify(g));
+        if (!formSmart.smart) formSmart.smart = { specific:'', measurable:'', achievable:'', relevant:'', timeBound:'' };
+        smartUI.step = 0;
+        go('smartWizard');
+      }
+      break;
+    }
+    case 'smart-delete':
+      GoalsManager.delete(id);
+      toast('🗑️ 已刪除');
+      go('smartHub');
+      break;
+    case 'smart-progress':
+      GoalsManager.updateProgress(id, Number(value));
+      toast('📊 進度已更新！');
+      render();
+      break;
+    case 'smart-toggle-accordion': {
+      const idx = smartUI.expandedIds.indexOf(id);
+      if (idx >= 0) smartUI.expandedIds.splice(idx, 1);
+      else smartUI.expandedIds.push(id);
+      render();
+      break;
+    }
+    case 'smart-to-woop': {
+      const g = GoalsManager.get(id);
+      if (g) {
+        formWoop = Object.assign(defaultFormWoop(), { wish: g.title });
+        woopUI = { step: 0 };
+        go('woopWizard');
+      }
+      break;
+    }
+
     /* ---- V1.8: WOOP ---- */
     case 'woop-new': formWoop = defaultFormWoop(); woopUI = { step:0 }; go('woopWizard'); break;
     case 'woop-example': {
@@ -7568,6 +7918,36 @@ document.addEventListener('click', function(e){
       toast('✓ 已加入我的卡片');
       formCardAdd = { text:'', category:'today', note:'' };
       go('cardManage');
+      break;
+    }
+    case 'quick-card-draw': {
+      const a = CardManager.draw('random');
+      if(a){
+        quickCardUI.drawnAnswer = a;
+        quickCardUI.feedback = null;
+        const entry = CardManager.draws.add({
+          question: '快速抽卡',
+          answer: a.text,
+          category: a.category || 'classic',
+          understanding: '',
+          feeling: 5,
+          laterResult: ''
+        });
+        quickCardUI.currentDrawId = entry ? entry.id : null;
+      } else {
+        toast('目前無可用卡片');
+      }
+      render();
+      break;
+    }
+    case 'quick-card-feedback': {
+      quickCardUI.feedback = value;
+      if(quickCardUI.currentDrawId){
+        const labels = { resonant: '有共鳴', think: '值得想想', normal: '普普通通' };
+        CardManager.draws.update(quickCardUI.currentDrawId, { understanding: labels[value] || value });
+      }
+      toast('✓ 已記錄感受');
+      render();
       break;
     }
 
