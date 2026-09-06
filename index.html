@@ -1276,6 +1276,7 @@ const Store = {
         { id: 'rc_mind_3', category: 'mind', title: '心態調適與軍旅同袍人際保持', status: 'not_started', isCustom: false },
         { id: 'rc_mind_4', category: 'mind', title: '健檢規劃與身體狀態掌握', status: 'not_started', isCustom: false }
       ],
+      themeSettings: defaultThemeSettings(),
       settings: {
         theme:'system', privacySeen:false, demoSeeded:false, demoCleared:false, gratitudeIntroSeen:false,
         displayName:'', waterGoal:2000, englishLevel:'beginner',
@@ -1307,6 +1308,22 @@ const Store = {
       const freshDefaults = this.defaultData();
       this.data = Object.assign(freshDefaults, parsed);
 
+      if (!this.data.healthLogs) this.data.healthLogs = { sleep:[], water:[], mood:[], stress:[] };
+      if (!this.data.healthLogs.sleep) this.data.healthLogs.sleep = [];
+      if (!this.data.healthLogs.water) this.data.healthLogs.water = [];
+      if (!this.data.healthLogs.mood) this.data.healthLogs.mood = [];
+      if (!this.data.healthLogs.stress) this.data.healthLogs.stress = [];
+
+      // V2.6 Phase 1 themeSettings Migration
+      if (!parsed.themeSettings) {
+        const legacyTheme = (this.data.settings && this.data.settings.theme) || 'system';
+        this.data.themeSettings = Object.assign(defaultThemeSettings(), {
+          preset: legacyTheme === 'dark' ? 'dark' : (legacyTheme === 'light' ? 'light' : 'system'),
+          mode: 'preset'
+        });
+      } else {
+        this.data.themeSettings = Object.assign(defaultThemeSettings(), parsed.themeSettings);
+      }
       if (!Array.isArray(this.data.timelineEvents)) this.data.timelineEvents = [];
       if (!Array.isArray(this.data.careerJobs)) this.data.careerJobs = [];
       if (!this.data.financialConfig) this.data.financialConfig = { monthlyIncome: 0, monthlyExpenses: 0, savingsTarget: 0, netWorth: 0 };
@@ -4239,14 +4256,11 @@ UI.screenSettings = function(){
     `).join('')}
   </div>
 
-  <div class="settingsgroup-label">外觀</div>
-  <div class="formwrap" style="padding-top:0;padding-bottom:6px;">
-    <div class="chiprow">
-      ${UI.chip('settings.theme','system',s.theme,'系統')}
-      ${UI.chip('settings.theme','light',s.theme,'淺色')}
-      ${UI.chip('settings.theme','dark',s.theme,'深色')}
-    </div>
+  <div class="settingsgroup-label">🎨 外觀與主題</div>
+  <div class="formwrap" style="padding-top:0;">
+    <button type="button" class="bigbtn primary" data-action="open-appearance-modal">🎨 開啟外觀與主題設定</button>
   </div>
+  ${appearanceUI.modalOpen ? renderAppearanceModal() : ''}
   <div class="settingsgroup-label">提醒</div>
   <div class="settingsrow"><div class="l">喝水／放鬆／任務提醒</div><div style="color:var(--ink-faint);font-size:11px;text-align:right;max-width:130px;">目前只保存提醒設定，實際通知視瀏覽器／裝置支援而定</div></div>
 
@@ -4274,6 +4288,64 @@ UI.screenSettings = function(){
   <div class="gap"></div>
   `;
 };
+
+
+function renderAppearanceModal(){
+  const f = formThemeSettings;
+  return `
+  <div class="overlay center" id="appearanceModalOverlay" data-action="close-appearance-modal">
+    <div class="sheet" style="max-height:85vh;overflow-y:auto;">
+      <div class="sheet-title">🎨 外觀與主題設定</div>
+      
+      <div class="settingsgroup-label" style="padding:4px 0 8px 0;">選擇主題預設</div>
+      <div style="display:grid;grid-template-columns:repeat(2,1fr);gap:8px;margin-bottom:14px;">
+        ${Object.keys(THEME_PRESETS).filter(k=>k!=='custom').map(k=>{
+          const p = THEME_PRESETS[k];
+          const active = (f.mode === 'preset' && f.preset === k);
+          return `
+          <button type="button" class="chip ${active?'active':''}" style="padding:10px;justify-content:center;font-weight:600;" data-action="select-theme-preset" data-value="${k}">
+            ${p.emoji} ${p.label}
+          </button>`;
+        }).join('')}
+        <button type="button" class="chip ${f.mode==='custom'?'active':''}" style="padding:10px;justify-content:center;font-weight:600;grid-column:span 2;" data-action="select-theme-preset" data-value="custom">
+          🎨 自訂顏色 (Custom Colors)
+        </button>
+      </div>
+
+      ${f.mode === 'custom' || f.customEnabled ? `
+      <div class="settingsgroup-label" style="padding:4px 0 8px 0;">自訂色彩選擇器</div>
+      <div style="display:flex;flex-direction:column;gap:10px;margin-bottom:14px;">
+        <div style="display:flex;align-items:center;justify-content:space-between;background:var(--bg-card2);padding:8px 12px;border-radius:10px;">
+          <span style="font-size:13.5px;font-weight:600;">主色 (Primary Accent)</span>
+          <input type="color" value="${f.primaryColor || '#4B5320'}" onchange="formThemeSettings.primaryColor=this.value; applyTheme(formThemeSettings);">
+        </div>
+        <div style="display:flex;align-items:center;justify-content:space-between;background:var(--bg-card2);padding:8px 12px;border-radius:10px;">
+          <span style="font-size:13.5px;font-weight:600;">背景主色 (Background)</span>
+          <input type="color" value="${f.backgroundColor || '#F3EFE3'}" onchange="formThemeSettings.backgroundColor=this.value; applyTheme(formThemeSettings);">
+        </div>
+        <div style="display:flex;align-items:center;justify-content:space-between;background:var(--bg-card2);padding:8px 12px;border-radius:10px;">
+          <span style="font-size:13.5px;font-weight:600;">卡片背景色 (Card Color)</span>
+          <input type="color" value="${f.cardColor || '#FBF9F2'}" onchange="formThemeSettings.cardColor=this.value; applyTheme(formThemeSettings);">
+        </div>
+        <div style="display:flex;align-items:center;justify-content:space-between;background:var(--bg-card2);padding:8px 12px;border-radius:10px;">
+          <span style="font-size:13.5px;font-weight:600;">主要文字色 (Text Color)</span>
+          <input type="color" value="${f.textColor || '#2B2E28'}" onchange="formThemeSettings.textColor=this.value; applyTheme(formThemeSettings);">
+        </div>
+        <div style="display:flex;align-items:center;justify-content:space-between;background:var(--bg-card2);padding:8px 12px;border-radius:10px;">
+          <span style="font-size:13.5px;font-weight:600;">次要文字色 (Muted Text)</span>
+          <input type="color" value="${f.mutedTextColor || '#5B5F52'}" onchange="formThemeSettings.mutedTextColor=this.value; applyTheme(formThemeSettings);">
+        </div>
+      </div>
+      ` : ''}
+
+      <div style="display:flex;gap:8px;margin-top:16px;">
+        <button type="button" class="bigbtn primary" style="flex:2;" data-action="save-appearance">儲存設定</button>
+        <button type="button" class="bigbtn" style="flex:1;background:transparent;border:1px solid var(--line);color:var(--ink-soft);" data-action="close-appearance-modal">取消</button>
+      </div>
+      <button type="button" class="tplbtn" data-action="reset-appearance" style="margin-top:12px;width:100%;color:#D9534F;border-color:transparent;">恢復預設外觀</button>
+    </div>
+  </div>`;
+}
 
 UI.screenPhoneMigration = function(){
   return `
@@ -6355,14 +6427,88 @@ function doClearAllConfirmed(){
   go('home');
 }
 
+
+/* ============================ V2.6 Phase 1: THEME & APPEARANCE ============================ */
+const THEME_PRESETS = {
+  system: { label: '系統跟隨', emoji: '💻', isDark: false },
+  light: { label: '預設淺色', emoji: '☀️', bg: '#F3EFE3', card: '#FBF9F2', ink: '#2B2E28', inkSoft: '#5B5F52', primary: '#4B5320', outer: '#DCD6C4', line: '#DCD5BF' },
+  dark: { label: '預設深色', emoji: '🌑', bg: '#1E211A', card: '#262B1F', ink: '#EDEADC', inkSoft: '#B7B9A8', primary: '#8CA05A', outer: '#101208', line: '#3A4030' },
+  navy: { label: '海洋藍', emoji: '🌊', bg: '#0F172A', card: '#1E293B', ink: '#F8FAFC', inkSoft: '#94A3B8', primary: '#3B82F6', outer: '#020617', line: '#334155' },
+  forest: { label: '森林綠', emoji: '🟢', bg: '#052E16', card: '#14532D', ink: '#F0FDF4', inkSoft: '#86EFAC', primary: '#22C55E', outer: '#022C22', line: '#166534' },
+  purple: { label: '薰衣草紫', emoji: '🟣', bg: '#1E1B4B', card: '#312E81', ink: '#F5F3FF', inkSoft: '#C4B5FD', primary: '#8B5CF6', outer: '#0F172A', line: '#4338CA' },
+  warm: { label: '溫暖米色', emoji: '🟠', bg: '#FAF5EF', card: '#FFFDF9', ink: '#3D312A', inkSoft: '#786C65', primary: '#D97706', outer: '#EFE3D3', line: '#EAD9C6' },
+  custom: { label: '自訂外觀', emoji: '🎨' }
+};
+
+function defaultThemeSettings() {
+  return {
+    mode: 'preset',
+    preset: 'system',
+    primaryColor: '#4B5320',
+    backgroundColor: '#F3EFE3',
+    cardColor: '#FBF9F2',
+    textColor: '#2B2E28',
+    mutedTextColor: '#5B5F52',
+    customEnabled: false
+  };
+}
+
+let appearanceUI = { modalOpen: false };
+let formThemeSettings = defaultThemeSettings();
+
 /* ============================ THEME ============================ */
-function applyTheme(){
-  const t = Store.data.settings.theme || 'system';
-  let effective = t;
-  if(t==='system'){
-    effective = (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches) ? 'dark' : 'light';
+function applyTheme(targetSettings){
+  const ts = targetSettings || (Store.data && Store.data.themeSettings) || defaultThemeSettings();
+  const root = document.documentElement;
+
+  if (root && root.style && typeof root.style.removeProperty === 'function') {
+    const varsToClear = ['--bg', '--bg-card', '--bg-card2', '--ink', '--ink-soft', '--olive', '--olive-dark', '--sage', '--sage-light', '--line', '--outer'];
+    varsToClear.forEach(v => root.style.removeProperty(v));
   }
-  document.documentElement.setAttribute('data-theme', effective);
+
+  let presetKey = ts.preset || 'system';
+  if (ts.mode === 'custom' || ts.customEnabled) {
+    presetKey = 'custom';
+  }
+
+  if (presetKey === 'system') {
+    const isDark = (typeof window !== 'undefined' && window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches);
+    presetKey = isDark ? 'dark' : 'light';
+  }
+
+  if (root && typeof root.setAttribute === 'function') {
+    root.setAttribute('data-theme', presetKey);
+  }
+
+  if (root && root.style && typeof root.style.setProperty === 'function') {
+    if (presetKey === 'custom') {
+      const bg = ts.backgroundColor || '#F3EFE3';
+      const card = ts.cardColor || '#FBF9F2';
+      const ink = ts.textColor || '#2B2E28';
+      const inkSoft = ts.mutedTextColor || '#5B5F52';
+      const primary = ts.primaryColor || '#4B5320';
+
+      root.style.setProperty('--bg', bg);
+      root.style.setProperty('--bg-card', card);
+      root.style.setProperty('--bg-card2', card);
+      root.style.setProperty('--ink', ink);
+      root.style.setProperty('--ink-soft', inkSoft);
+      root.style.setProperty('--olive', primary);
+      root.style.setProperty('--olive-dark', primary);
+      root.style.setProperty('--outer', bg);
+    } else if (THEME_PRESETS[presetKey] && THEME_PRESETS[presetKey].bg) {
+      const p = THEME_PRESETS[presetKey];
+      root.style.setProperty('--bg', p.bg);
+      root.style.setProperty('--bg-card', p.card);
+      root.style.setProperty('--bg-card2', p.card);
+      root.style.setProperty('--ink', p.ink);
+      root.style.setProperty('--ink-soft', p.inkSoft);
+      root.style.setProperty('--olive', p.primary);
+      root.style.setProperty('--olive-dark', p.primary);
+      root.style.setProperty('--outer', p.outer || p.bg);
+      root.style.setProperty('--line', p.line || '#DCD5BF');
+    }
+  }
 }
 
 /* ============================ EVENT DELEGATION ============================ */
@@ -6395,6 +6541,50 @@ document.addEventListener('click', function(e){
       if(value==='militaryRetirement'){ formRetirementProfile = defaultFormRetirementProfile(); }
       go(value);
       break;
+    
+    case 'open-appearance-modal':
+      formThemeSettings = Object.assign({}, defaultThemeSettings(), Store.data.themeSettings || {});
+      appearanceUI.modalOpen = true;
+      render();
+      break;
+    case 'close-appearance-modal':
+      appearanceUI.modalOpen = false;
+      applyTheme(Store.data.themeSettings); // Revert live preview
+      formThemeSettings = Object.assign({}, defaultThemeSettings(), Store.data.themeSettings || {});
+      render();
+      break;
+    case 'select-theme-preset':
+      if (value === 'custom') {
+        formThemeSettings.mode = 'custom';
+        formThemeSettings.customEnabled = true;
+      } else {
+        formThemeSettings.mode = 'preset';
+        formThemeSettings.preset = value;
+        formThemeSettings.customEnabled = false;
+      }
+      applyTheme(formThemeSettings); // Live preview
+      render();
+      break;
+    case 'save-appearance':
+      Store.data.themeSettings = Object.assign({}, formThemeSettings);
+      Store.data.settings.theme = formThemeSettings.preset;
+      Store.save();
+      applyTheme();
+      appearanceUI.modalOpen = false;
+      toast('🎨 已儲存外觀設定');
+      render();
+      break;
+    case 'reset-appearance':
+      formThemeSettings = defaultThemeSettings();
+      Store.data.themeSettings = defaultThemeSettings();
+      Store.data.settings.theme = 'system';
+      Store.save();
+      applyTheme();
+      appearanceUI.modalOpen = false;
+      toast('🎨 已恢復預設外觀');
+      render();
+      break;
+
     case 'set-trend-range':
       TrendManager.setRangeDays(value);
       render();
