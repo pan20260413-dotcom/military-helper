@@ -2225,6 +2225,78 @@ const CardManager = {
   draws: makeSimpleManager('cardDraws')
 };
 
+
+/* ============================ V2.6 Phase 1.5: TODAY ENGLISH ON HOME SCREEN ============================ */
+let homeEnglishState = { offset: 0 };
+
+function getDailySeedHash(dateStr) {
+  let hash = 0;
+  for (let i = 0; i < dateStr.length; i++) {
+    hash = (hash << 5) - hash + dateStr.charCodeAt(i);
+    hash |= 0;
+  }
+  return Math.abs(hash);
+}
+
+function getHomeTodayEnglishItem() {
+  if (typeof EnglishManager === 'undefined') return null;
+  const all = EnglishManager.allItems();
+  if (!all || all.length === 0) return null;
+
+  const unmastered = all.filter(i => !i.mastered && EnglishManager.progressFor(i.id).status !== 'known');
+  const candidates = unmastered.length > 0 ? unmastered : all;
+
+  const todayStr = TaskManager.todayDateStr();
+  const seed = getDailySeedHash(todayStr) + (homeEnglishState.offset || 0);
+  return candidates[seed % candidates.length];
+}
+
+function renderHomeTodayEnglishCard() {
+  const item = getHomeTodayEnglishItem();
+  if (!item) return '';
+
+  const enText = item.en || item.word || '';
+  const pronText = item.pron ? `[${item.pron}]` : '';
+  const zhText = item.zh || item.meaning || '';
+  const exEnText = item.exEn || item.example || '例句準備中';
+  const exZhText = item.exZh || '';
+  const catText = item.catName || (typeof ENGLISH_TYPE_LABELS !== 'undefined' ? ENGLISH_TYPE_LABELS[item.type] : null) || '生活英文';
+  const isFav = EnglishManager.isFavorite(item.id) || !!item.favorite;
+  const isMastered = item.mastered || EnglishManager.progressFor(item.id).status === 'known';
+
+  return `
+  <div class="statbox" style="margin:14px 16px;box-shadow:var(--shadow);">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
+      <div style="font-weight:700;font-size:14px;color:var(--ink);">🇬🇧 今日英文 <span class="chip small" style="font-weight:normal;margin-left:6px;">${esc(catText)}</span></div>
+      <div style="display:flex;gap:6px;">
+        <button type="button" class="tplbtn" data-action="next-home-english" style="padding:2px 8px;font-size:11px;">🎲 換一個</button>
+        <button type="button" class="tplbtn" data-action="toggle-home-english-fav" data-id="${item.id}" style="padding:2px 8px;font-size:11px;">${isFav ? '★ 已收藏' : '⭐ 收藏'}</button>
+      </div>
+    </div>
+    
+    <div style="font-family:var(--serif);font-size:18px;font-weight:700;color:var(--olive-dark);margin:4px 0 2px 0;">
+      ${esc(enText)} <span style="font-family:var(--sans);font-size:13px;font-weight:normal;color:var(--ink-faint);">${esc(pronText)}</span>
+    </div>
+    <div style="font-size:14px;font-weight:600;color:var(--ink);margin-bottom:8px;">
+      ${esc(zhText)}
+    </div>
+
+    <div style="font-size:12.5px;color:var(--ink-soft);background:var(--bg-card2);padding:8px 10px;border-radius:8px;line-height:1.5;margin-bottom:10px;">
+      <div>💬 ${esc(exEnText)}</div>
+      ${exZhText ? `<div style="color:var(--ink-faint);font-size:11.5px;margin-top:2px;">${esc(exZhText)}</div>` : ''}
+    </div>
+
+    <div style="display:flex;justify-content:space-between;align-items:center;">
+      <button type="button" class="tplbtn" data-action="toggle-home-english-mastered" data-id="${item.id}" style="padding:4px 10px;font-size:12px;background:${isMastered ? 'var(--green-bg)' : 'transparent'};color:${isMastered ? 'var(--green)' : 'var(--ink-soft)'};">
+        ${isMastered ? '✅ 已學會' : '◯ 標記學會'}
+      </button>
+      <button type="button" class="startbtn" data-action="nav" data-value="learningHub" style="padding:4px 12px;font-size:12px;">
+        📚 開始學習 ›
+      </button>
+    </div>
+  </div>`;
+}
+
 /* ============================ V2.2 第二批：EnglishManager ============================ */
 const EnglishManager = {
   ensureSeeded(){
@@ -3235,10 +3307,7 @@ UI.screenHome = function(){
     </div>
   </div>`) : ''}
 
-  ${hs.english ? `
-  <div class="linkrow" style="cursor:default;">
-    <div><div>🇬🇧 今日英文</div><div class="sub">生活英文還在準備中，敬請期待</div></div>
-  </div>` : ''}
+  ${hs.english ? renderHomeTodayEnglishCard() : ''}
 
   <div class="entrygrid">
     <button class="entrybtn primary" data-action="nav" data-value="report">
@@ -6583,6 +6652,35 @@ document.addEventListener('click', function(e){
       appearanceUI.modalOpen = false;
       toast('🎨 已恢復預設外觀');
       render();
+      break;
+
+    
+    case 'next-home-english':
+      if (typeof homeEnglishState === 'undefined') homeEnglishState = { offset: 0 };
+      homeEnglishState.offset = (homeEnglishState.offset || 0) + 1;
+      render();
+      break;
+    case 'toggle-home-english-fav':
+      if (id) {
+        EnglishManager.toggleFavorite(id);
+        const it = EnglishManager.getItem(id);
+        if (it) { it.favorite = EnglishManager.isFavorite(id); Store.save(); }
+        render();
+      }
+      break;
+    case 'toggle-home-english-mastered':
+      if (id) {
+        const it = EnglishManager.getItem(id);
+        const isM = it ? (it.mastered || EnglishManager.progressFor(id).status === 'known') : false;
+        if (isM) {
+          EnglishManager.setStatus(id, 'unknown');
+          if (it) { it.mastered = false; Store.save(); }
+        } else {
+          EnglishManager.setStatus(id, 'known');
+          if (it) { it.mastered = true; Store.save(); }
+        }
+        render();
+      }
       break;
 
     case 'set-trend-range':
