@@ -3295,6 +3295,151 @@ function homeSuggestions(){
 }
 
 
+
+/* ============================ V2.6 Phase 4: 每日行動中心 (DailyActionManager) ============================ */
+const DailyActionManager = {
+  todayStr() { return TaskManager.todayDateStr(); },
+  hasTodayMood() {
+    return HealthManager.logsForDate('mood', this.todayStr()).length > 0;
+  },
+  hasTodayStress() {
+    return HealthManager.logsForDate('stress', this.todayStr()).length > 0;
+  },
+  hasTodaySleep() {
+    return HealthManager.logsForDate('sleep', this.todayStr()).length > 0;
+  },
+  hasTodayWater() {
+    return HealthManager.logsForDate('water', this.todayStr()).length > 0;
+  },
+  hasTodayRelax() {
+    const today = this.todayStr();
+    const relax = (Store.data.relaxSessions || []).some(s => s.date === today || TaskManager.isToday(s.createdAt));
+    const mindful = (Store.data.mindfulnessSessions || []).some(s => s.date === today || TaskManager.isToday(s.createdAt));
+    return relax || mindful;
+  },
+  hasTodayGratitude() {
+    const today = this.todayStr();
+    return (Store.data.gratitude || []).some(g => g.date === today || TaskManager.isToday(g.createdAt));
+  },
+  hasTodayEnglish() {
+    const today = this.todayStr();
+    const englishProgress = Store.data.englishProgress || {};
+    return Object.keys(englishProgress).some(k => englishProgress[k].lastReviewed === today);
+  },
+
+  getPrimaryRecommendation() {
+    if (!this.hasTodaySleep()) {
+      return {
+        priority: 1,
+        title: '😴 記錄今天睡眠',
+        desc: '昨晚睡得好嗎？記下睡眠時數，隨時關心自己的體能與恢復狀態。',
+        btnText: '記錄睡眠',
+        action: 'nav',
+        value: 'healthForm'
+      };
+    }
+    if (!this.hasTodayWater()) {
+      return {
+        priority: 2,
+        title: '💧 記一杯水 (250ml)',
+        desc: '今天尚未補充水分，記下一杯水，維持好的新陳代謝。',
+        btnText: '＋記一杯水',
+        action: 'health-quickadd',
+        value: 'water'
+      };
+    }
+    const todayStress = HealthManager.todayAgg('stress');
+    if (todayStress !== null && todayStress <= 40) {
+      return {
+        priority: 3,
+        title: '😮‍💨 做 60 秒呼吸',
+        desc: '今天感覺壓力較高，給自己一分鐘深呼吸，穩住情緒。',
+        btnText: '開始 60 秒呼吸',
+        action: 'nav',
+        value: 'relax'
+      };
+    }
+    if (!this.hasTodayEnglish()) {
+      return {
+        priority: 4,
+        title: '🇬🇧 學今日英文短語',
+        desc: '每天累積一個生活短語，點滴提升自我能力。',
+        btnText: '開始學習',
+        action: 'nav',
+        value: 'learningHub'
+      };
+    }
+    if (!this.hasTodayGratitude()) {
+      return {
+        priority: 5,
+        title: '🙏 寫一句感恩日記',
+        desc: '記下今天發生的一件好事，看見生活中的溫暖。',
+        btnText: '寫感恩日記',
+        action: 'nav',
+        value: 'gratitudeForm'
+      };
+    }
+    if (!this.hasTodayRelax()) {
+      return {
+        priority: 6,
+        title: '🧘 2 分鐘正念覺察',
+        desc: '給自己兩分鐘安靜時間，把注意力帶回當下。',
+        btnText: '開始正念',
+        action: 'mindful-start',
+        value: 'twoMin'
+      };
+    }
+    return {
+      priority: 7,
+      title: '🎯 回顧今天的累積成果',
+      desc: '太棒了！今天已完成多項個人紀錄與自我照顧，保持好步調。',
+      btnText: '📊 查看完整趨勢',
+      action: 'nav',
+      value: 'trendCenter'
+    };
+  },
+
+  getTodayCompletionList() {
+    return [
+      { key: 'mood', label: '心情', done: this.hasTodayMood(), action: 'nav', value: 'emotionForm' },
+      { key: 'stress', label: '壓力', done: this.hasTodayStress(), action: 'nav', value: 'emotionForm' },
+      { key: 'sleep', label: '睡眠', done: this.hasTodaySleep(), action: 'nav', value: 'healthForm' },
+      { key: 'water', label: '喝水', done: this.hasTodayWater(), action: 'health-quickadd', value: 'water' },
+      { key: 'relax', label: '放鬆', done: this.hasTodayRelax(), action: 'nav', value: 'relax' },
+      { key: 'gratitude', label: '感恩', done: this.hasTodayGratitude(), action: 'nav', value: 'gratitudeForm' },
+      { key: 'english', label: '英文', done: this.hasTodayEnglish(), action: 'nav', value: 'learningHub' }
+    ];
+  }
+};
+
+function renderHomeRecommendationCard() {
+  const rec = DailyActionManager.getPrimaryRecommendation();
+  return `
+  <div class="recommendation-card" style="margin: 12px 0; padding: 14px 16px; background: var(--bg-card); border: 1px solid var(--line); border-radius: 16px;">
+    <div style="font-size:12px; font-weight:bold; color:var(--primary); margin-bottom:4px; display:flex; align-items:center; gap:6px;">
+      <span>🧭 現在最適合做什麼？</span>
+    </div>
+    <div style="font-size:15px; font-weight:bold; color:var(--ink); margin-bottom:4px;">${esc(rec.title)}</div>
+    <div style="font-size:13px; color:var(--ink-soft); line-height:1.5; margin-bottom:10px;">${esc(rec.desc)}</div>
+    <button class="bigbtn" style="padding:10px 16px; font-size:14px;" data-action="${rec.action}" data-value="${rec.value}">${esc(rec.btnText)}</button>
+  </div>`;
+}
+
+function renderHomeTodayCompletionGrid() {
+  const list = DailyActionManager.getTodayCompletionList();
+  return `
+  <div class="today-completion-card" style="margin: 12px 0; padding: 12px 14px; background: var(--bg-card); border: 1px solid var(--line); border-radius: 16px;">
+    <div style="font-size:13px; font-weight:bold; color:var(--ink); margin-bottom:8px;">📌 今日完成進度</div>
+    <div style="display:grid; grid-template-columns: repeat(4, 1fr); gap: 6px;">
+      ${list.map(item => `
+        <button class="chip" style="font-size:11.5px; padding:6px 2px; text-align:center; justify-content:center; background:${item.done?'var(--bg-body)':'transparent'};" data-action="${item.action}" data-value="${item.value}">
+          ${item.done ? '☑️' : '○'} ${esc(item.label)}
+        </button>
+      `).join('')}
+    </div>
+  </div>`;
+}
+
 /* ============================ V2.6 Phase 3: 首頁「🌤️ 今天的你」卡片 ============================ */
 function renderHomeTodayStatusCard() {
   const todaySleep = HealthManager.todayAgg('sleep');
@@ -3383,6 +3528,12 @@ UI.screenHome = function(){
   <div class="oneliner">💬 ${esc(TaskManager.oneLiner())}</div>
 
   ${hs.status ? renderHomeTodayStatusCard() : ''}
+
+  <!-- 🧭 現在最適合做什麼？ -->
+  ${renderHomeRecommendationCard()}
+
+  <!-- 📌 今日完成進度 -->
+  ${renderHomeTodayCompletionGrid()}
 
   <div class="board">
     <div class="board-tile red" data-action="nav-filter" data-value="urgent"><div class="n">${c.urgent}</div><div class="l">🔴急件</div></div>
