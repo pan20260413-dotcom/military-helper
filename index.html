@@ -2850,12 +2850,46 @@ const TrendManager = {
     const avgGoalProgress = goals.length > 0 ? Math.round(totalGoalProgress / goals.length) : 0;
 
     const baseMetrics = this.getMetrics ? this.getMetrics() : {};
+    const cardDraws = (Store.data && Array.isArray(Store.data.cardDraws)) ? Store.data.cardDraws : [];
+    const tasks = (Store.data && Array.isArray(Store.data.tasks)) ? Store.data.tasks : [];
+    const completedTasks = tasks.filter(t => t.status === 'done').length;
+
     return Object.assign({
       journalCount: journals.length,
       jobCount: jobs.length,
       completedGoals: completedGoals,
-      avgGoalProgress: avgGoalProgress
+      avgGoalProgress: avgGoalProgress,
+      cardDrawCount: cardDraws.length,
+      completedTasksCount: completedTasks
     }, baseMetrics);
+  },
+  getWeeklySummary() {
+    const m = this.getMetrics(7);
+    const tasks = (Store.data && Array.isArray(Store.data.tasks)) ? Store.data.tasks : [];
+    const completedTasksThisWeek = tasks.filter(t => t.status === 'done' && (TaskManager.isToday(t.updatedAt || t.createdAt) || (new Date(t.updatedAt || t.createdAt) >= new Date(Date.now() - 7 * 86400000)))).length;
+    const cardDrawsThisWeek = (Store.data && Array.isArray(Store.data.cardDraws)) ? Store.data.cardDraws.filter(c => (new Date(c.date || c.createdAt) >= new Date(Date.now() - 7 * 86400000))).length : 0;
+    
+    return {
+      tasksDone: completedTasksThisWeek,
+      wordsKnown: m.englishKnownCount || 0,
+      relaxCount: (m.relaxCount || 0) + (m.mindfulnessCount || 0),
+      gratitudeCount: m.gratitudeCount || 0,
+      cardDraws: cardDrawsThisWeek,
+      completedGoals: this.getStats().completedGoals,
+      avgGoalProgress: this.getStats().avgGoalProgress
+    };
+  },
+  getLifestyleSummary(m) {
+    const activeDays = [m.mood.avg !== null, m.stress.avg !== null, m.sleep.avg !== null, m.water.avg !== null].filter(Boolean).length;
+    let text = `最近 7 天，你有多個領域的生活紀錄（放鬆 ${m.relaxCount || 0} 次、感恩 ${m.gratitudeCount || 0} 次）。`;
+    if (m.stress.avg !== null && m.stress.avg <= 40) {
+      text += ' 最近比較常記錄壓力，建議今天留一點時間進行 60 秒呼吸練習。';
+    } else if (m.relaxCount > 0 || m.mindfulnessCount > 0) {
+      text += ' 這週正念放鬆維持得很好，繼續保持步調。';
+    } else {
+      text += ' 這週步調紮實，隨時可以抽一張解答卡陪伴自己。';
+    }
+    return text;
   },
   getRangeDays(){
     return (Store.data && Store.data.trendSettings && Store.data.trendSettings.range) || 7;
@@ -3248,6 +3282,72 @@ function homeSuggestions(){
   return pool.slice(0,3);
 }
 
+
+/* ============================ V2.6 Phase 3: 首頁「🌤️ 今天的你」卡片 ============================ */
+function renderHomeTodayStatusCard() {
+  const todaySleep = HealthManager.todayAgg('sleep');
+  const todayWater = HealthManager.todayAgg('water');
+  const todayMood = HealthManager.todayAgg('mood');
+  const todayStress = HealthManager.todayAgg('stress');
+  const relaxCount = (Store.data.relaxSessions || []).filter(s => s.date === TaskManager.todayDateStr() || TaskManager.isToday(s.createdAt)).length;
+  const mindfulCount = (Store.data.mindfulnessSessions || []).filter(s => s.date === TaskManager.todayDateStr() || TaskManager.isToday(s.createdAt)).length;
+  const totalRelaxToday = relaxCount + mindfulCount;
+
+  const waterGoal = (Store.data.settings && Store.data.settings.waterGoal) || 2000;
+  const waterPercent = todayWater !== null ? Math.min(100, Math.round((todayWater / waterGoal) * 100)) : 0;
+
+  const actions = [];
+  if (todayStress !== null && todayStress <= 40) {
+    actions.push({ icon: '🌬️', label: '壓力偏高，做個 60 秒呼吸', action: 'nav', value: 'relax' });
+  } else if (totalRelaxToday === 0) {
+    actions.push({ icon: '🧘', label: '今天給自己 60 秒放鬆時間', action: 'nav', value: 'relax' });
+  }
+
+  if (todaySleep === null) {
+    actions.push({ icon: '😴', label: '補充今天的睡眠紀錄', action: 'nav', value: 'healthForm' });
+  }
+
+  if (todayWater === null || todayWater < waterGoal * 0.5) {
+    actions.push({ icon: '💧', label: '記一杯水 (250ml)', action: 'health-quickadd', value: 'water' });
+  }
+
+  const gratitudeToday = (Store.data.gratitude || []).filter(g => g.date === TaskManager.todayDateStr() || TaskManager.isToday(g.createdAt)).length;
+  if (gratitudeToday === 0) {
+    actions.push({ icon: '🙏', label: '留下一件值得感謝的事', action: 'nav', value: 'gratitudeForm' });
+  }
+
+  const englishProgress = Store.data.englishProgress || {};
+  const englishToday = Object.keys(englishProgress).some(k => englishProgress[k].lastReviewed === TaskManager.todayDateStr());
+  if (!englishToday) {
+    actions.push({ icon: '🇬🇧', label: '學一個生活英文短語', action: 'nav', value: 'learningHub' });
+  }
+
+  return `
+  <div class="today-status-card" style="margin: 12px 0; padding: 14px 16px; background: var(--bg-card); border: 1px solid var(--line); border-radius: 16px;">
+    <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:10px;">
+      <div style="font-size:15px; font-weight:bold; color:var(--ink); display:flex; align-items:center; gap:6px;">
+        <span>🌤️ 今天的你</span>
+      </div>
+      <button class="chip" style="font-size:12px; padding:4px 10px;" data-action="nav" data-value="trendCenter">📊 查看完整趨勢 ›</button>
+    </div>
+
+    <div class="todaygrid" style="padding:0; margin-bottom:10px;">
+      <div class="todaytile"><div class="e">😊</div><div class="n">${todayMood !== null ? (todayMood >= 60 ? '良好' : (todayMood >= 40 ? '普通' : '需要沉澱')) : '未紀錄'}</div><div class="l">心情</div></div>
+      <div class="todaytile"><div class="e">😮‍💨</div><div class="n">${todayStress !== null ? (todayStress <= 30 ? '偏高' : (todayStress <= 60 ? '適中' : '平穩')) : '未紀錄'}</div><div class="l">壓力</div></div>
+      <div class="todaytile"><div class="e">😴</div><div class="n">${todaySleep !== null ? todaySleep.toFixed(1) + 'h' : '未紀錄'}</div><div class="l">睡眠</div></div>
+      <div class="todaytile"><div class="e">💧</div><div class="n">${todayWater !== null ? waterPercent + '%' : '未紀錄'}</div><div class="l">喝水</div></div>
+    </div>
+
+    ${actions.length > 0 ? `
+    <div style="border-top:1px dashed var(--line); padding-top:8px; margin-top:6px;">
+      <div style="font-size:12px; color:var(--ink-soft); margin-bottom:6px;">💡 溫和的下一步建議：</div>
+      <div style="display:flex; flex-wrap:wrap; gap:6px;">
+        ${actions.slice(0, 3).map(a => `<button class="chip" style="font-size:12px; border-color:var(--primary); color:var(--ink);" data-action="${a.action}" data-value="${a.value}"><span>${a.icon}</span> ${esc(a.label)}</button>`).join('')}
+      </div>
+    </div>` : ''}
+  </div>`;
+}
+
 UI.screenHome = function(){
   const c = TaskManager.homeCounts();
   const nxt = TaskManager.nextUpList();
@@ -3270,15 +3370,7 @@ UI.screenHome = function(){
   </div>
   <div class="oneliner">💬 ${esc(TaskManager.oneLiner())}</div>
 
-  ${hs.status ? `
-  <div class="todaygrid" style="margin-top:12px;">
-    <div class="todaytile"><div class="e">😴</div><div class="n">${todaySleep!==null?todaySleep.toFixed(1):'尚未紀錄'}</div><div class="l">睡眠</div></div>
-    <div class="todaytile"><div class="e">💧</div><div class="n">${todayWater!==null?Math.round(todayWater):'尚未紀錄'}</div><div class="l">喝水</div></div>
-    <div class="todaytile"><div class="e">😊</div><div class="n">${todayMood!==null?todayMood.toFixed(1):'尚未紀錄'}</div><div class="l">心情</div></div>
-    <div class="todaytile"><div class="e">😮‍💨</div><div class="n">${todayStress!==null?todayStress.toFixed(1):'尚未紀錄'}</div><div class="l">壓力</div></div>
-  </div>
-  ${HealthManager.todayHints().map(h=>`<div class="hint" style="margin:6px 16px 0 16px;">${esc(h)}</div>`).join('')}
-  ` : ''}
+  ${hs.status ? renderHomeTodayStatusCard() : ''}
 
   <div class="board">
     <div class="board-tile red" data-action="nav-filter" data-value="urgent"><div class="n">${c.urgent}</div><div class="l">🔴急件</div></div>
@@ -3430,13 +3522,54 @@ UI.screenTrendCenter = function(){
   <div style="padding:14px 16px;">
     ${reminders.map(r=>`<div class="hint" style="margin-bottom:12px;">${esc(r)}</div>`).join('')}
 
-    ${!m.hasData ? `
-    <div class="empty" style="padding:40px 16px;background:var(--bg-card);border:1px solid var(--line);border-radius:16px;text-align:center;">
-      <span class="e" style="font-size:36px;">🌱</span>
-      <div style="font-weight:700;font-size:16px;margin:12px 0 6px 0;color:var(--ink);">還沒有足夠資料</div>
-      <div style="font-size:13px;color:var(--ink-soft);line-height:1.6;">先記錄幾天，我會慢慢幫你看見自己的變化。</div>
+    
+    <!-- 🧭 最近的我 -->
+    <div class="think-block" style="margin:0 0 16px 0; background:var(--bg-card); border-radius:14px; padding:12px 14px; border:1px solid var(--line);">
+      <div style="font-weight:bold; font-size:14px; color:var(--primary); margin-bottom:6px; display:flex; align-items:center; gap:6px;">
+        <span>🧭 最近的我（生活型態摘要）</span>
+      </div>
+      <div style="font-size:13px; color:var(--ink); line-height:1.6;">
+        ${esc(TrendManager.getLifestyleSummary(m))}
+      </div>
     </div>
-    ` : `
+
+    <!-- 🏆 本週進度 -->
+    <div class="section-label" style="padding:4px 0 8px 0;">🏆 本週進度總覽</div>
+    <div class="statsgrid" style="padding:0;margin-bottom:16px;">
+      <div class="statbox">
+        <div style="font-size:12px;color:var(--ink-soft);">📋 完成任務</div>
+        <div class="n" style="font-size:20px;">${TrendManager.getWeeklySummary().tasksDone} 件</div>
+      </div>
+      <div class="statbox">
+        <div style="font-size:12px;color:var(--ink-soft);">🇬🇧 英文單字</div>
+        <div class="n" style="font-size:20px;">${TrendManager.getWeeklySummary().wordsKnown} 個已學</div>
+      </div>
+      <div class="statbox">
+        <div style="font-size:12px;color:var(--ink-soft);">🧘 放鬆與正念</div>
+        <div class="n" style="font-size:20px;">${TrendManager.getWeeklySummary().relaxCount} 次</div>
+      </div>
+      <div class="statbox">
+        <div style="font-size:12px;color:var(--ink-soft);">🙏 感恩日記</div>
+        <div class="n" style="font-size:20px;">${TrendManager.getWeeklySummary().gratitudeCount} 篇</div>
+      </div>
+      <div class="statbox">
+        <div style="font-size:12px;color:var(--ink-soft);">📖 解答卡抽卡</div>
+        <div class="n" style="font-size:20px;">${TrendManager.getWeeklySummary().cardDraws} 次</div>
+      </div>
+      <div class="statbox">
+        <div style="font-size:12px;color:var(--ink-soft);">🎯 目標完成率</div>
+        <div class="n" style="font-size:20px;">${TrendManager.getWeeklySummary().avgGoalProgress}%</div>
+      </div>
+    </div>
+
+    ${!m.hasData ? `
+    <div class="empty" style="padding:24px 16px;background:var(--bg-card);border:1px solid var(--line);border-radius:16px;text-align:center;margin-bottom:16px;">
+      <span class="e" style="font-size:32px;">🌱</span>
+      <div style="font-weight:700;font-size:15px;margin:8px 0 4px 0;color:var(--ink);">健康趨勢資料累積中</div>
+      <div style="font-size:13px;color:var(--ink-soft);line-height:1.6;">持續記錄幾天心情、睡眠或喝水，這裡將呈現你的個人變化曲線。</div>
+    </div>
+    ` : ''}
+
     <div class="section-label" style="padding:4px 0 8px 0;">🌿 健康與照顧</div>
     <div class="statsgrid" style="padding:0;margin-bottom:16px;">
       <div class="statbox">
@@ -3460,66 +3593,6 @@ UI.screenTrendCenter = function(){
         <div style="font-size:11.5px;color:var(--ink-soft);margin-top:4px;">目標 ${m.water.goal} ml</div>
       </div>
     </div>
-
-    <div class="statsgrid" style="padding:0;margin-bottom:20px;">
-      <div class="statbox">
-        <div style="font-size:12px;color:var(--ink-soft);">🧘 放鬆次數</div>
-        <div class="n">${m.relaxCount}</div>
-      </div>
-      <div class="statbox">
-        <div style="font-size:12px;color:var(--ink-soft);">🧠 正念次數</div>
-        <div class="n">${m.mindfulnessCount}</div>
-      </div>
-    </div>
-
-    <div class="section-label" style="padding:4px 0 8px 0;">💼 工作與生活</div>
-    <div class="statsgrid" style="padding:0;margin-bottom:16px;">
-      <div class="statbox">
-        <div style="font-size:12px;color:var(--ink-soft);">⏸ 被打斷次數</div>
-        <div class="n">${m.interruptionCount}</div>
-      </div>
-      <div class="statbox">
-        <div style="font-size:12px;color:var(--ink-soft);">↩️ 回到原工作比例</div>
-        <div class="n">${m.returnRate !== null ? m.returnRate + '%' : '—'}</div>
-      </div>
-      <div class="statbox">
-        <div style="font-size:12px;color:var(--ink-soft);">🙏 感恩日記</div>
-        <div class="n">${m.gratitudeCount}</div>
-      </div>
-      <div class="statbox">
-        <div style="font-size:12px;color:var(--ink-soft);">🧠 自我覺察</div>
-        <div class="n">${m.selfAwareCount}</div>
-      </div>
-    </div>
-
-    <div class="section-label" style="padding:4px 0 8px 0;">📚 學習與成長</div>
-    <div class="statsgrid" style="padding:0;margin-bottom:16px;">
-      <div class="statbox">
-        <div style="font-size:12px;color:var(--ink-soft);">🎯 WOOP 次數</div>
-        <div class="n">${m.woopCount}</div>
-      </div>
-      <div class="statbox">
-        <div style="font-size:12px;color:var(--ink-soft);">📊 SWOT 次數</div>
-        <div class="n">${m.swotCount}</div>
-      </div>
-      <div class="statbox">
-        <div style="font-size:12px;color:var(--ink-soft);">📝 5W1H 次數</div>
-        <div class="n">${m.fiveWOneHCount}</div>
-      </div>
-      <div class="statbox">
-        <div style="font-size:12px;color:var(--ink-soft);">🔄 PDCA 次數</div>
-        <div class="n">${m.pdcaCount}</div>
-      </div>
-      <div class="statbox">
-        <div style="font-size:12px;color:var(--ink-soft);">🇬🇧 英文複習次數</div>
-        <div class="n">${m.englishReviewCount}</div>
-      </div>
-      <div class="statbox">
-        <div style="font-size:12px;color:var(--ink-soft);">🌟 英文已學會</div>
-        <div class="n">${m.englishKnownCount}</div>
-      </div>
-    </div>
-    `}
   </div>
   <div class="gap"></div>
   `;
