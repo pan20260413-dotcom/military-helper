@@ -3594,7 +3594,7 @@ function renderRetirementEditModal(){
   const f = formRetirementProfile;
   return `
   <div class="overlay center" id="retirementProfileOverlay" data-action="close-retirement-edit-modal">
-    <div class="sheet" style="max-height:85vh;overflow-y:auto;" onclick="event.stopPropagation();">
+    <div class="sheet" style="max-height:85vh;overflow-y:auto;">
       <div class="sheet-title">✏️ 編輯軍旅資料與試算</div>
       
       <div class="field"><label>軍種／職務</label><input type="text" placeholder="例如：陸軍／連長" value="${esc(f.branchRole)}" oninput="formRetirementProfile.branchRole=this.value"></div>
@@ -3613,12 +3613,12 @@ function renderRetirementEditModal(){
       <div class="settingsgroup-label" style="padding:10px 0 4px 0;">🌱 退休生活與財務預估</div>
       <div class="field"><label>住哪裡</label>
         <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:4px;">
-          ${RETIREMENT_HOUSING_OPTIONS.map(o=>`<button class="chip ${f.housing===o.key?'active':''}" data-action="set-retirement-housing" data-value="${o.key}">${o.label}</button>`).join('')}
+          ${RETIREMENT_HOUSING_OPTIONS.map(o=>`<button type="button" class="chip ${f.housing===o.key?'active':''}" data-action="set-retirement-housing" data-value="${o.key}">${o.label}</button>`).join('')}
         </div>
       </div>
       <div class="field"><label>退休後工作規劃</label>
         <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:4px;">
-          ${RETIREMENT_WORK_OPTIONS.map(o=>`<button class="chip ${f.postWork===o.key?'active':''}" data-action="set-retirement-work" data-value="${o.key}">${o.label}</button>`).join('')}
+          ${RETIREMENT_WORK_OPTIONS.map(o=>`<button type="button" class="chip ${f.postWork===o.key?'active':''}" data-action="set-retirement-work" data-value="${o.key}">${o.label}</button>`).join('')}
         </div>
       </div>
       <div class="field"><label>緊急預備金 (元)</label><input type="number" placeholder="例如：300000" value="${esc(f.emergencyFund)}" oninput="formRetirementProfile.emergencyFund=this.value"></div>
@@ -3627,16 +3627,16 @@ function renderRetirementEditModal(){
         <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:4px;">
           ${RETIREMENT_LIFESTYLE_OPTIONS.map(o=>{
             const active = (f.lifestyle || []).includes(o.key);
-            return `<button class="chip ${active?'active':''}" data-action="toggle-retirement-lifestyle" data-value="${o.key}">${o.emoji} ${o.label}</button>`;
+            return `<button type="button" class="chip ${active?'active':''}" data-action="toggle-retirement-lifestyle" data-value="${o.key}">${o.emoji} ${o.label}</button>`;
           }).join('')}
         </div>
       </div>
 
       <div style="display:flex;gap:8px;margin-top:16px;">
-        <button class="bigbtn primary" style="flex:2;" data-action="save-retirement-profile">儲存修改</button>
-        <button class="bigbtn" style="flex:1;background:transparent;border:1px solid var(--line);color:var(--ink-soft);" data-action="close-retirement-edit-modal">取消</button>
+        <button type="button" class="bigbtn primary" style="flex:2;" type="button" data-action="save-retirement-profile">儲存修改</button>
+        <button type="button" class="bigbtn" style="flex:1;background:transparent;border:1px solid var(--line);color:var(--ink-soft);" type="button" data-action="close-retirement-edit-modal">取消</button>
       </div>
-      <button class="tplbtn" data-action="clear-retirement-profile" style="margin-top:12px;width:100%;color:#D9534F;border-color:transparent;">重設資料</button>
+      <button type="button" class="tplbtn" data-action="clear-retirement-profile" style="margin-top:12px;width:100%;color:#D9534F;border-color:transparent;">重設資料</button>
     </div>
   </div>`;
 }
@@ -3645,19 +3645,19 @@ function renderChecklistEditModal(){
   const f = formChecklistEdit;
   return `
   <div class="overlay center" id="checklistEditOverlay" data-action="close-checklist-modal">
-    <div class="sheet" onclick="event.stopPropagation();">
+    <div class="sheet">
       <div class="sheet-title">${f.id ? '✏️ 編輯清單項目' : '＋ 新增清單項目'}</div>
       
       <div class="field"><label>項目名稱</label><input type="text" placeholder="例如：退伍證件彙整" value="${esc(f.title)}" oninput="formChecklistEdit.title=this.value"></div>
       <div class="field"><label>分類</label>
         <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:4px;">
-          ${Object.keys(CHECKLIST_CATEGORY_META).map(ck=>`<button class="chip ${f.category===ck?'active':''}" data-action="set-checklist-edit-cat" data-value="${ck}">${CHECKLIST_CATEGORY_META[ck].label}</button>`).join('')}
+          ${Object.keys(CHECKLIST_CATEGORY_META).map(ck=>`<button type="button" class="chip ${f.category===ck?'active':''}" data-action="set-checklist-edit-cat" data-value="${ck}">${CHECKLIST_CATEGORY_META[ck].label}</button>`).join('')}
         </div>
       </div>
 
       <div style="display:flex;gap:8px;margin-top:16px;">
-        <button class="bigbtn primary" style="flex:2;" data-action="save-checklist-item">儲存</button>
-        <button class="bigbtn" style="flex:1;background:transparent;border:1px solid var(--line);color:var(--ink-soft);" data-action="close-checklist-modal">取消</button>
+        <button type="button" class="bigbtn primary" style="flex:2;" type="button" data-action="save-checklist-item">儲存</button>
+        <button type="button" class="bigbtn" style="flex:1;background:transparent;border:1px solid var(--line);color:var(--ink-soft);" type="button" data-action="close-checklist-modal">取消</button>
       </div>
     </div>
   </div>`;
@@ -6372,6 +6372,7 @@ document.addEventListener('click', function(e){
 
   const el = e.target.closest('[data-action]');
   if(!el) return;
+  if(el.classList.contains('overlay') && e.target !== el) return;
   const action = el.dataset.action;
   const id = el.dataset.id;
   const value = el.dataset.value;
@@ -6412,6 +6413,7 @@ document.addEventListener('click', function(e){
       render();
       break;
     case 'close-retirement-edit-modal':
+      formRetirementProfile = defaultFormRetirementProfile();
       retirementUI.editProfileModal = false;
       render();
       break;
@@ -6466,6 +6468,7 @@ document.addEventListener('click', function(e){
       render();
       break;
     case 'close-checklist-modal':
+      formChecklistEdit = { id: null, category: 'file', title: '' };
       retirementUI.editChecklistModal = false;
       render();
       break;
